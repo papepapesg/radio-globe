@@ -1,8 +1,7 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.requests import Request
 import httpx
 import asyncio
@@ -20,8 +19,24 @@ app = FastAPI(title="Radio Globe", description="A global radio station discovery
 
 # Mount static files and templates
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-app.mount("/static", StaticFiles(directory=os.path.join(PROJECT_ROOT, "static")), name="static")
+STATIC_DIR = os.path.join(PROJECT_ROOT, "static")
 templates = Jinja2Templates(directory=os.path.join(PROJECT_ROOT, "templates"))
+
+@app.get("/static/{file_path:path}")
+async def serve_static(file_path: str):
+    full_path = os.path.join(STATIC_DIR, file_path)
+    if os.path.isfile(full_path):
+        with open(full_path, "rb") as f:
+            content = f.read()
+        media_type = "application/octet-stream"
+        if full_path.endswith(".js"):
+            media_type = "application/javascript"
+        elif full_path.endswith(".css"):
+            media_type = "text/css"
+        elif full_path.endswith(".html"):
+            media_type = "text/html"
+        return Response(content=content, media_type=media_type)
+    return Response(status_code=404)
 
 # Add CORS middleware
 app.add_middleware(
@@ -60,14 +75,14 @@ async def fetch_country_flag(client: httpx.AsyncClient, country_code: str) -> Op
 
 async def get_stations_by_country(country_code: str) -> List[Dict]:
     """Fetch radio stations for a specific country."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(
                 f"{RADIO_BROWSER_API}/stations/bycountrycodeexact/{country_code}",
                 headers={"User-Agent": USER_AGENT}
             )
             response.raise_for_status()
-            
+
             stations = response.json()
             # Sort by bitrate and limit to top 100
             stations.sort(key=lambda x: int(x.get("bitrate", 0) or 0), reverse=True)
@@ -82,9 +97,9 @@ async def get_stations_by_country(country_code: str) -> List[Dict]:
                 for station in stations[:100]
                 if station["url"] and station["name"]
             ]
-        except Exception as e:
-            logger.error(f"Error fetching stations for {country_code}: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+        except httpx.HTTPError as e:
+            logger.error(f"Error fetching stations for {country_code}: {e}")
+            return []
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -94,7 +109,7 @@ async def home(request: Request):
 @app.get("/api/countries")
 async def get_countries():
     """Get list of countries with their station counts and flags."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(
                 f"{RADIO_BROWSER_API}/countries",
@@ -127,9 +142,9 @@ async def get_countries():
                 }
                 for country, flag in zip(valid_countries, flags)
             ]
-        except Exception as e:
-            logger.error(f"Error fetching countries: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+        except httpx.HTTPError as e:
+            logger.error(f"Error fetching countries: {e}")
+            return []
 
 @app.get("/api/stations/{country_code}")
 async def get_stations(country_code: str):
