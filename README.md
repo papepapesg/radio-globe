@@ -118,3 +118,19 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Support
 
 For support, please open an issue in the GitHub repository.
+
+## Utilities
+
+### Transfer YouTube Music Likes to Spotify
+
+The script `transfer_youtube_to_spotify.py` moves your liked songs from YouTube Music into a Spotify playlist.
+
+1. Ensure `ytmusicapi` and `spotipy` are installed (`pip install -r requirements.txt`).
+2. Create a headers authentication JSON for YouTube Music via `ytmusicapi.setup_oauth()`.
+3. Set the Spotify environment variables `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and `SPOTIFY_REDIRECT_URI`.
+4. Run the script:
+   ```bash
+   python transfer_youtube_to_spotify.py --playlist "My YT Likes" --headers headers_auth.json
+   ```
+
+The script will create the playlist if it does not already exist and add any matching tracks.
